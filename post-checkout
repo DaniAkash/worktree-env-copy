@@ -1,0 +1,80 @@
+#!/bin/bash
+# Global Git hook: post-checkout
+#
+# https://github.com/DaniAkash/worktree-env-copy
+#
+# Behavior:
+#   1. Copy .env* files from the main repo into newly-created worktrees,
+#      preserving directory structure and skipping gitignored locations.
+#   2. ALWAYS chain to any per-repo .git/hooks/post-checkout, since
+#      `core.hooksPath` REPLACES per-repo hooks rather than stacking. The
+#      chain must run even if our env-copy errors out, because tools like
+#      git-lfs install per-repo post-checkout hooks that are essential for
+#      correct repository state (e.g. materializing LFS-tracked files).
+#
+# Trigger contract (post-checkout): "$1 prev_head $2 new_head $3 branch_flag"
+#   $3 == 1  ->  branch checkout (this is what `git worktree add` triggers)
+#   $3 == 0  ->  file checkout (`git checkout -- file`)
+
+GIT_COMMON_DIR=$(git rev-parse --git-common-dir 2>/dev/null)
+
+# ---------------------------------------------------------------------------
+# .env auto-copy -- only for branch checkouts inside a worktree.
+# Wrapped in `{ ...; } || true` so any failure here NEVER skips the per-repo
+# hook chain that follows.
+# ---------------------------------------------------------------------------
+{
+    if [ "$3" = "1" ] && [ -n "$GIT_COMMON_DIR" ]; then
+        MAIN_REPO=$(cd "$GIT_COMMON_DIR/.." && pwd)
+        CURRENT_DIR=$(pwd)
+
+        # No-op in main repo or on fresh clone (CURRENT_DIR == MAIN_REPO).
+        if [ "$CURRENT_DIR" != "$MAIN_REPO" ]; then
+            echo "📋 Worktree detected: $CURRENT_DIR"
+
+            # Build a prune list of gitignored dirs so `find` never descends
+            # into node_modules/, dist/, .venv/, etc. Faster + correct.
+            prune_args=(-name ".git" -prune)
+            while IFS= read -r dir; do
+                [ -z "$dir" ] && continue
+                prune_args+=(-o -path "$MAIN_REPO/$dir" -prune)
+            done < <(
+                find "$MAIN_REPO" -mindepth 1 -maxdepth 3 -type d \
+                    -not -path "*/.git/*" -not -name ".git" | while read -r d; do
+                    reldir="${d#$MAIN_REPO/}"
+                    if git -C "$MAIN_REPO" check-ignore -q "$reldir" 2>/dev/null; then
+                        echo "$reldir"
+                    fi
+                done
+            )
+
+            find "$MAIN_REPO" \( "${prune_args[@]}" \) -o -name ".env*" -type f -print | while read -r envfile; do
+                relpath="${envfile#$MAIN_REPO/}"
+                target="$CURRENT_DIR/$relpath"
+                if [ -f "$target" ]; then
+                    echo "  ⊘ Skipped $relpath (already exists)"
+                    continue
+                fi
+                mkdir -p "$(dirname "$target")"
+                cp "$envfile" "$target"
+                echo "  ✓ Copied $relpath"
+            done
+
+            echo "✅ Environment files synced!"
+        fi
+    fi
+} || true
+
+# ---------------------------------------------------------------------------
+# Chain to per-repo post-checkout hook, if any. Runs unconditionally so that
+# hooks like git-lfs's continue to work after we've taken over core.hooksPath
+# globally. Self-reference guard prevents recursion.
+# ---------------------------------------------------------------------------
+if [ -n "$GIT_COMMON_DIR" ]; then
+    PER_REPO_HOOK="$GIT_COMMON_DIR/hooks/post-checkout"
+    if [ -x "$PER_REPO_HOOK" ] && [ "$PER_REPO_HOOK" != "$0" ]; then
+        exec "$PER_REPO_HOOK" "$@"
+    fi
+fi
+
+exit 0
