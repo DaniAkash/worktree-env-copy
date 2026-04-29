@@ -70,41 +70,11 @@ if [ "$SET_HOOKS_PATH" = "1" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 4 — Detect per-repo hooks that will now be shadowed.
-# These will still be chained from our hook (see post-checkout for details),
-# so this is informational — not a blocker.
-# ---------------------------------------------------------------------------
-echo
-echo "→ Scanning for existing per-repo post-checkout hooks (informational)…"
-
-PER_REPO_HOOKS_FOUND=0
-SEARCH_ROOTS=()
-[ -d "$HOME/workbench" ]   && SEARCH_ROOTS+=("$HOME/workbench")
-[ -d "$HOME/projects" ]    && SEARCH_ROOTS+=("$HOME/projects")
-[ -d "$HOME/code" ]        && SEARCH_ROOTS+=("$HOME/code")
-[ -d "$HOME/dev" ]         && SEARCH_ROOTS+=("$HOME/dev")
-[ -d "$HOME/Documents/GitHub" ] && SEARCH_ROOTS+=("$HOME/Documents/GitHub")
-
-if [ ${#SEARCH_ROOTS[@]} -gt 0 ]; then
-    while IFS= read -r hook; do
-        echo "  • $hook"
-        PER_REPO_HOOKS_FOUND=$((PER_REPO_HOOKS_FOUND + 1))
-    done < <(find "${SEARCH_ROOTS[@]}" -path "*/.git/hooks/post-checkout" -not -name "*.sample" 2>/dev/null)
-
-    if [ "$PER_REPO_HOOKS_FOUND" -eq 0 ]; then
-        echo "  (none found in ${SEARCH_ROOTS[*]})"
-    else
-        echo
-        echo "  ✓ These per-repo hooks will continue to work — the global hook"
-        echo "    chains to them automatically (see post-checkout source)."
-    fi
-else
-    echo "  (skipped — no common code dirs found under \$HOME)"
-fi
-
-# ---------------------------------------------------------------------------
 # Done.
 # ---------------------------------------------------------------------------
+echo
+echo "  ℹ Existing per-repo post-checkout hooks (e.g. git-lfs, husky) will"
+echo "    continue to work — the global hook chains to them. See README."
 echo
 echo "✅ Install complete."
 echo
