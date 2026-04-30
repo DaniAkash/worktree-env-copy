@@ -114,13 +114,20 @@ cd worktree-env-copy
 ./uninstall.sh
 ```
 
+`uninstall.sh` is **standalone** — it doesn't need anything else from the repo. You can also download just that one file and run it on its own (recommended if you no longer have the repo cloned):
+
+```bash
+curl -O https://raw.githubusercontent.com/DaniAkash/worktree-env-copy/main/uninstall.sh
+bash uninstall.sh
+```
+
 The uninstaller is conservative:
 
-- Only removes the `post-checkout` hook if it byte-for-byte matches our version
-- Only unsets `core.hooksPath` if it points at `~/.git-hooks` and that directory is empty afterwards
-- Refuses to delete anything it doesn't recognize
+- Identifies our hook by a **marker string** (the project URL embedded in the hook). Refuses to remove a `post-checkout` hook that doesn't carry the marker — pass `--force` if you've modified the hook and want to remove it anyway.
+- Only unsets `core.hooksPath` if it points at `~/.git-hooks` AND that directory is empty afterwards. If you have other hooks in there, the directory and the config are both left alone.
+- See `./uninstall.sh --help` for usage.
 
-If something looks unexpected, it tells you what to do manually rather than guessing.
+If something looks unexpected, the uninstaller tells you what to do manually rather than guessing.
 
 ## Troubleshooting
 
